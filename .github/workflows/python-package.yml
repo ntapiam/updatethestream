@@ -39,8 +39,6 @@ jobs:
         include:
           - os: macos-latest
             asset_name: udts-macos-x86_64-${{ github.run_number }}
-          - os: windows-latest
-            asset_name: udts-win64-${{ github.run_number }}
 
     steps:
     - uses: actions/checkout@v2
@@ -103,42 +101,18 @@ jobs:
         else
           foldername=udts-$(date '+%Y%m%d')-${GITHUB_SHA:0:7}-${{ matrix.os }}
         fi
-        mv dist/ $foldername
+        if [ "${{ matrix.os }}" == "macos-latest" ]; then
+          chmod a+x ./dist/udts.app/Contents/MacOS/udts
+        fi
         echo "::set-output name=foldername::$foldername"
       shell: bash
 
-    - uses: vimtor/action-zip@v1
-      with:
-        files: ${{ steps.foldername.outputs.foldername }}
-        recursive: false
-        dest: ${{ matrix.asset_name }}.zip
+    - name: tar folder
+      run: tar -cvf dist.tar dist
 
-    - uses: softprops/action-gh-release@v1
-      if: ${{ env.BRANCH_NAME == 'main' && github.ref_type == 'tag' }}
+    - name: Upload artifact
+      uses: actions/upload-artifact@v2
       with:
-        draft: true
-        files: ${{ matrix.asset_name }}.zip
-        body_path: ${{ github.workspace }}/patchnotes.md
+        name: dist-folder
+        path: dist.tar
 
-    - uses: actions/checkout@v2
-      with:
-        repository: ${{ secrets.WEB_REPO }}
-        token: ${{ secrets.GH_PAT }}
-        path: 'website'
-        fetch-depth: 0
-
-    - name: Publish build to website
-      run: |
-        if [ "$BRANCH_NAME" == "main" ]; then
-          folder=releases
-        else
-          folder=development
-        fi
-        cp ${{ matrix.asset_name }}.zip website/builds/$folder/${{ steps.foldername.outputs.foldername }}.zip
-        cd website
-        git config user.name "runner"
-        git config user.email "runner@${{ matrix.os }}.local"
-        git add .
-        git commit -m "Upload build of commit ${GITHUB_SHA:0:7}"
-        git push
-      shell: bash
